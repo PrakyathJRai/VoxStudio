@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         Role          @default(USER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  speechJobs   SpeechJob[]
+}
+
+model SpeechJob {
+  id           String   @id @default(cuid())
+  userId       String
+  text         String   @db.Text
+  language     String
+  voice        String
+  audioPath    String
+  audioFormat  String   @default("mp3")
+  characterCount Int
+  speakingRate Float    @default(1.0)
+  pitch        Float    @default(0.0)
+  favorite     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+}

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build output
+dist/
+client/dist/
+server/dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+client/.env
+client/.env.*
+server/.env
+server/.env.*
+!client/.env.example
+!server/.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Generated audio and uploaded files
+server/audio/*
+server/uploads/*
+server/src/uploads/*
+!server/audio/.gitkeep
+!server/uploads/.gitkeep
+
+# Local databases and backups
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+
+# Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Local Piper model (large binary; configure separately for deployment)
+*.onnx
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+server/test-speech.wav

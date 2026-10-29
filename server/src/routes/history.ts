@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { prisma } from '../db';
+import { requireAuth } from '../middleware/auth';
+import { resolveAudioPath } from '../services/storage';
+import { unlink } from 'node:fs/promises';
+const router = Router();
+router.use(requireAuth);
+router.get('/', async (req: any, res, next) => { try { const jobs = await prisma.speechJob.findMany({ where: { userId: req.user.id }, orderBy: { createdAt: 'desc' }, take: 100, select: { id:true, text:true, language:true, voice:true, audioPath:true, characterCount:true, favorite:true, createdAt:true } }); res.json({ history: jobs.map(j => ({ ...j, audioUrl: `/api/audio/${j.audioPath}` })) }); } catch(e) { next(e); } });
+router.patch('/:id/favorite', async (req: any, res, next) => { try { const job = await prisma.speechJob.findFirst({ where: { id: req.params.id, userId: req.user.id } }); if (!job) return res.status(404).json({ error: 'History item not found.' }); const updated = await prisma.speechJob.update({ where: { id: job.id }, data: { favorite: !job.favorite } }); res.json({ id: updated.id, favorite: updated.favorite }); } catch(e) { next(e); } });
+router.delete('/:id', async (req: any, res, next) => { try { const job = await prisma.speechJob.findFirst({ where: { id: req.params.id, userId: req.user.id } }); if (!job) return res.status(404).json({ error: 'History item not found.' }); await prisma.speechJob.delete({ where: { id: job.id } }); try { await unlink(resolveAudioPath(job.audioPath)); } catch {} res.status(204).end(); } catch(e) { next(e); } });
+export default router;
