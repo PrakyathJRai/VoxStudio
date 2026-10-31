@@ -5,13 +5,21 @@ import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config';
 
+// Windows uses your existing standalone Piper installation.
+// Linux uses the Piper executable installed inside Docker.
+const IS_WINDOWS = process.platform === 'win32';
+
 const PIPER_EXE =
   process.env.PIPER_EXE ||
-  'D:/piper-standalone/piper/piper.exe';
+  (IS_WINDOWS
+    ? 'D:/piper-standalone/piper/piper.exe'
+    : '/opt/piper-venv/bin/piper');
 
 const PIPER_MODEL =
   process.env.PIPER_MODEL ||
-  'D:/tts-advanced/server/en_US-lessac-medium.onnx';
+  (IS_WINDOWS
+    ? 'D:/tts-advanced/server/en_US-lessac-medium.onnx'
+    : '/opt/piper-voices/en_US-lessac-medium.onnx');
 
 const PIPER_ESPEAK_DATA =
   process.env.PIPER_ESPEAK_DATA ||
@@ -26,8 +34,7 @@ const LOCAL_VOICE = {
 export async function listVoices(language?: string) {
   if (
     language &&
-    language.toLowerCase() !== 'en-us' &&
-    language.toLowerCase() !== 'en_us'
+    !['en-us', 'en_us'].includes(language.toLowerCase())
   ) {
     return [];
   }
@@ -42,10 +49,8 @@ export async function synthesize(
   speakingRate: number,
   pitch: number
 ) {
-  // This installed Piper model currently supports US English.
   if (
-    language.toLowerCase() !== 'en-us' &&
-    language.toLowerCase() !== 'en_us'
+    !['en-us', 'en_us'].includes(language.toLowerCase())
   ) {
     throw new Error(
       'The local Piper model currently supports English (US) only. Please select English (US).'
@@ -62,12 +67,10 @@ export async function synthesize(
     throw new Error('Please enter some text to convert to speech.');
   }
 
-  // Piper uses length_scale rather than a speaking-rate setting.
-  // Smaller values speak faster; larger values speak slower.
   const safeRate = Math.min(2, Math.max(0.5, speakingRate || 1));
   const lengthScale = 1 / safeRate;
 
-  // This Piper command-line version does not support pitch adjustment.
+  // This Piper CLI does not support pitch adjustment.
   void pitch;
 
   await mkdir(config.audioDir, { recursive: true });
@@ -75,48 +78,58 @@ export async function synthesize(
   const fileName = `${randomUUID()}.wav`;
   const filePath = path.join(config.audioDir, fileName);
 
+  const args = [
+    '--model',
+    PIPER_MODEL,
+    '--output_file',
+    filePath,
+    '--length_scale',
+    String(lengthScale),
+  ];
+
+  // The standalone Windows Piper installation requires espeak-ng-data.
+  if (IS_WINDOWS) {
+    args.push('--espeak_data', PIPER_ESPEAK_DATA);
+  }
+
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(
-      PIPER_EXE,
-      [
-        '--model',
-        PIPER_MODEL,
-        '--output_file',
-        filePath,
-        '--espeak_data',
-        PIPER_ESPEAK_DATA,
-        '--length_scale',
-        String(lengthScale),
-      ],
-      {
-        windowsHide: true,
-        stdio: ['pipe', 'ignore', 'pipe'],
-      }
-    );
+    const child = spawn(PIPER_EXE, args, {
+      windowsHide: true,
+      stdio: ['pipe', 'ignore', 'pipe'],
+    });
 
     let errorOutput = '';
+    let settled = false;
 
     child.stderr.setEncoding('utf8');
+
     child.stderr.on('data', (chunk: string) => {
       errorOutput += chunk;
     });
 
     child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+
       reject(
         new Error(
-          `Could not start local Piper. Check PIPER_EXE. ${error.message}`
+          `Could not start Piper. Check PIPER_EXE. ${error.message}`
         )
       );
     });
 
     child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+
       if (code === 0) {
         resolve();
       } else {
         reject(
           new Error(
             `Piper speech generation failed (exit code ${code}). ${
-              errorOutput.trim() || 'Check the Piper model and executable paths.'
+              errorOutput.trim() ||
+              'Check the Piper model and executable paths.'
             }`
           )
         );
@@ -124,8 +137,7 @@ export async function synthesize(
     });
 
     child.stdin.on('error', (error) => {
-      // The process close handler provides the final generation result.
-      if (errorOutput.length === 0) {
+      if (!errorOutput) {
         errorOutput = error.message;
       }
     });
