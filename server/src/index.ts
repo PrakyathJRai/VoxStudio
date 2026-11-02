@@ -15,7 +15,13 @@ import { requireAuth } from './middleware/auth';
 import { resolveAudioPath } from './services/storage';
 const app = express();
 app.disable('x-powered-by');
-app.use(cors({ origin: config.clientOrigin }));
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://vox-studio-pearl.vercel.app',
+  config.clientOrigin,
+];
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '1mb' }));
 app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, limit: 200, standardHeaders: 'draft-7', legacyHeaders: false }));
 app.get('/api/health', (_req,res) => res.json({ status:'ok', service:'text-to-speech-api' }));
